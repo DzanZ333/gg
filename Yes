@@ -1,0 +1,129 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local hrp = character:WaitForChild("HumanoidRootPart")
+local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+local teleporting = false
+local baseVoidPosition = Vector3.new(0, -3.4028235e+38, 0)
+
+local function setCollision(state)
+    for _, part in pairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = state
+        end
+    end
+end
+
+local function getCharacter()
+    character = player.Character or player.CharacterAdded:Wait()
+    hrp = character:WaitForChild("HumanoidRootPart")
+    humanoid = character:FindFirstChildOfClass("Humanoid")
+end
+
+local function findOwnPlotBlockHitbox()
+    for _, plot in pairs(workspace.Plots:GetChildren()) do
+        local plotSign = plot:FindFirstChild("PlotSign")
+        if plotSign then
+            local yourBase = plotSign:FindFirstChild("YourBase")
+            if yourBase and yourBase.Enabled then
+                local purchases = plot:FindFirstChild("Purchases")
+                if purchases then
+                    local plotBlock = purchases:FindFirstChild("PlotBlock")
+                    if plotBlock then
+                        local hitbox = plotBlock:FindFirstChild("Hitbox")
+                        return hitbox, plotBlock
+                    end
+                end
+            end
+        end
+    end
+    return nil, nil
+end
+
+local function randomVoidPosition()
+    return baseVoidPosition + Vector3.new(math.random(-5,5), 0, math.random(-5,5))
+end
+
+local function safeTeleportToPlotBlock()
+    spawn(function()
+        getCharacter()
+        setCollision(false)
+
+        local hitbox, plotBlock = findOwnPlotBlockHitbox()
+        if not hitbox then
+            warn("PlotBlock Hitbox not found!")
+            teleporting = false
+            setCollision(true)
+            return
+        end
+
+        local targetPosition = hitbox.Position + Vector3.new(0, -3, 0)
+
+        hrp.CFrame = CFrame.new(randomVoidPosition())
+        task.wait(0.5)
+
+        local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Linear)
+        local goal = {CFrame = CFrame.new(targetPosition)}
+        local tween = TweenService:Create(hrp, tweenInfo, goal)
+        tween:Play()
+        tween.Completed:Wait()
+
+        hrp.CFrame = CFrame.new(targetPosition)
+        setCollision(true)
+        print("Teleported to PlotBlock Hitbox:", targetPosition)
+
+        -- Check Timer Text
+        while teleporting and hitbox and hitbox:IsDescendantOf(workspace) do
+            local textValue = tonumber(hitbox.Text) or 0
+            if textValue > 0 then
+                print("Timer started (>0s), stopping teleport...")
+                teleporting = false
+                toggleButton.Text = "Start Steal"
+                toggleButton.BackgroundColor3 = Color3.new(0.2, 0.8, 0.2)
+                break
+            end
+            task.wait(0.5)
+        end
+    end)
+end
+
+RunService.Heartbeat:Connect(function()
+    if teleporting then
+        local hitbox, _ = findOwnPlotBlockHitbox()
+        if hitbox and (hrp.Position - hitbox.Position).Magnitude > 10 then
+            print("Auto-correcting position to PlotBlock Hitbox...")
+            setCollision(false)
+            hrp.CFrame = CFrame.new(hitbox.Position + Vector3.new(0, -3, 0))
+            setCollision(true)
+        end
+    end
+end)
+
+-- UI Toggle Button
+local screenGui = Instance.new("ScreenGui", player.PlayerGui)
+local toggleButton = Instance.new("TextButton", screenGui)
+toggleButton.Size = UDim2.new(0, 120, 0, 40)
+toggleButton.Position = UDim2.new(1, -130, 0.5, -20)
+toggleButton.Text = "Start Steal"
+toggleButton.BackgroundColor3 = Color3.new(0.2, 0.8, 0.2)
+toggleButton.TextColor3 = Color3.new(1,1,1)
+toggleButton.TextScaled = true
+toggleButton.BackgroundTransparency = 0.2
+toggleButton.BorderSizePixel = 2
+toggleButton.BorderColor3 = Color3.new(0,0,0)
+
+toggleButton.MouseButton1Click:Connect(function()
+    teleporting = not teleporting
+    if teleporting then
+        toggleButton.Text = "Stop Steal"
+        toggleButton.BackgroundColor3 = Color3.new(0.8, 0.2, 0.2)
+        safeTeleportToPlotBlock()
+    else
+        toggleButton.Text = "Start Steal"
+        toggleButton.BackgroundColor3 = Color3.new(0.2, 0.8, 0.2)
+    end
+end)
